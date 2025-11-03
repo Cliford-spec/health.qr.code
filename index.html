@@ -3,8 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <title>Health Bracelet Info</title>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"></script>
   <style>
     body { font-family: Arial; background-color: #f7f7f7; padding: 20px; }
     .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); max-width: 400px; margin: auto; }
@@ -19,35 +17,47 @@
     <h2>Loading...</h2>
   </div>
 
+  <!-- ✅ Firebase Setup & App Logic -->
   <script type="module">
-    // --- 1. Your Firebase Config ---
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_AUTH_DOMAIN",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_STORAGE_BUCKET",
-      messagingSenderId: "YOUR_SENDER_ID",
-      appId: "YOUR_APP_ID"
-    };
-
-    // --- 2. Initialize Firebase ---
+    // --- 1. Import Firebase SDKs ---
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // --- 2. Firebase Configuration ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyDbhVGOiY2gCNCvsElylzvAdcYsjaqldlc",
+      authDomain: "health-5845b.firebaseapp.com",
+      projectId: "health-5845b",
+      storageBucket: "health-5845b.firebasestorage.app",
+      messagingSenderId: "563237383831",
+      appId: "1:563237383831:web:57140193a3a654bcc783d2"
+      measurementId: "G-9N4BJN1RET"
+    };
+
+    // --- 3. Initialize Firebase App & Firestore ---
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // --- 3. Get QR ID from URL ---
+    // --- 4. Get QR Code ID from URL ---
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
     const appDiv = document.getElementById("app");
 
-    if (!id) {
-      appDiv.innerHTML = "<h2>QR Code invalid</h2>";
-    } else {
+    // --- 5. Load or Create Health Info ---
+    async function loadHealthInfo() {
+      if (!id) {
+        appDiv.innerHTML = `
+          <h2>QR Code Invalid</h2>
+          <p>Please make sure your QR link includes <b>?id=yourcode</b></p>
+          <p>Example: https://yourusername.github.io/healthbracelet/?id=bracelet001</p>
+        `;
+        return;
+      }
+
       const ref = doc(db, "users", id);
       const docSnap = await getDoc(ref);
 
-      // --- 4. If data exists, show info ---
+      // --- 6. If Data Exists → Show Info ---
       if (docSnap.exists()) {
         const data = docSnap.data();
         appDiv.innerHTML = `
@@ -56,9 +66,11 @@
           <p><b>Allergies:</b> ${data.allergies}</p>
           <p><b>Condition:</b> ${data.condition}</p>
           <p><b>Emergency Contact:</b> ${data.contact}</p>
+          <p style="font-size:12px; color:gray;">Bracelet ID: ${id}</p>
         `;
-      } else {
-        // --- 5. If not, show form ---
+      } 
+      // --- 7. If Not Found → Show Form ---
+      else {
         appDiv.innerHTML = `
           <h2>Fill Your Health Info</h2>
           <input id="name" placeholder="Full Name">
@@ -77,12 +89,21 @@
             condition: document.getElementById("condition").value,
             contact: document.getElementById("contact").value
           };
+
+          if (!data.name) {
+            alert("Please fill out your name.");
+            return;
+          }
+
           await setDoc(ref, data);
           alert("Information saved! Scan the QR again to view it.");
           location.reload();
         });
       }
     }
+
+    // --- 8. Run the Function ---
+    loadHealthInfo();
   </script>
 </body>
 </html>
