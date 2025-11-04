@@ -10,11 +10,16 @@
     h2 { color: #1a9b59; margin-top: 0; }
     input, textarea { width: 100%; padding: 10px; margin: 8px 0; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; }
     button { padding: 10px 14px; border: none; border-radius: 6px; background: #1a9b59; color: white; cursor: pointer; }
+    button:hover { background: #158048; }
     .muted { color: #666; font-size: 0.95rem; }
   </style>
-  <!-- Firebase modular SDKs -->
+
+  <!-- Firebase modular SDK -->
   <script type="module">
-    // ---- REPLACE THIS CONFIG WITH YOUR FIREBASE CONFIG FROM CONSOLE ----
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyDbhVGOiY2gCNCvsElylzvAdcYsjaqldlc",
       authDomain: "health-5845b.firebaseapp.com",
@@ -23,32 +28,24 @@
       messagingSenderId: "563237383831",
       appId: "1:563237383831:web:57140193a3a654bcc783d2",
     };
-    // -----------------------------------------------------------------
-
-    // Import Firebase modules
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore, doc, getDoc, setDoc
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // Helper to get ?id= from URL
+    // Get ID from URL (?id=)
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
 
-    // DOM
+    // Create container
     const container = document.createElement('div');
     container.className = 'card';
     document.body.appendChild(container);
 
-    // Show message when no id provided
     if (!id) {
       container.innerHTML = `
         <h2>QR Code invalid</h2>
         <p class="muted">Make sure the QR code link includes <b>?id=yourcode</b>.</p>
-        <p class="muted">Example: https://yourusername.github.io/healthbracelet/?id=bracelet001</p>
+        <p class="muted">Example: https://cliford-spec.github.io/health.qr.code/?id=bracelet001</p>
       `;
     } else {
       initForId(id);
@@ -56,70 +53,88 @@
 
     async function initForId(id) {
       container.innerHTML = `<h2>Loading...</h2>`;
-
       const ref = doc(db, "users", id);
+
       try {
         const snap = await getDoc(ref);
+
         if (snap.exists()) {
-          // Show saved info
           const data = snap.data();
+          showInfo(data);
+        } else {
+          showForm({});
+        }
+
+        // --- SHOW INFO VIEW ---
+        function showInfo(data) {
           container.innerHTML = `
             <h2>👤 ${escapeHtml(data.name || 'No name')}</h2>
             <p><b>Blood Type:</b> ${escapeHtml(data.blood || '-')}</p>
             <p><b>Allergies:</b> ${escapeHtml(data.allergies || '-')}</p>
             <p><b>Condition:</b> ${escapeHtml(data.condition || '-')}</p>
             <p><b>Emergency Contact:</b> ${escapeHtml(data.contact || '-')}</p>
-            <p class="muted">ID: <code>${escapeHtml(id)}</code></p>
+            <p class="muted">Bracelet ID: <code>${escapeHtml(id)}</code></p>
+            <button id="editBtn">Edit Information</button>
           `;
-        } else {
-          // Show form for first-time fill
+
+          document.getElementById('editBtn').addEventListener('click', () => {
+            showForm(data);
+          });
+        }
+
+        // --- SHOW FORM VIEW ---
+        function showForm(data) {
           container.innerHTML = `
-            <h2>Fill Your Health Info</h2>
-            <input id="name" placeholder="Full name" />
-            <input id="blood" placeholder="Blood Type (e.g. O+)" />
-            <input id="allergies" placeholder="Allergies (or 'None')" />
-            <input id="condition" placeholder="Medical condition(s)" />
-            <input id="contact" placeholder="Emergency contact (name - phone)" />
-            <button id="saveBtn">Save Information</button>
+            <h2>${data.name ? 'Edit Your Information' : 'Fill Your Health Info'}</h2>
+            <input id="name" placeholder="Full name" value="${escapeAttr(data.name)}" />
+            <input id="blood" placeholder="Blood Type (e.g. O+)" value="${escapeAttr(data.blood)}" />
+            <input id="allergies" placeholder="Allergies (or 'None')" value="${escapeAttr(data.allergies)}" />
+            <input id="condition" placeholder="Medical condition(s)" value="${escapeAttr(data.condition)}" />
+            <input id="contact" placeholder="Emergency contact (name - phone)" value="${escapeAttr(data.contact)}" />
+            <button id="saveBtn">${data.name ? 'Save Changes' : 'Save Information'}</button>
             <p class="muted">This bracelet ID: <code>${escapeHtml(id)}</code></p>
           `;
 
           document.getElementById('saveBtn').addEventListener('click', async () => {
-            const data = {
+            const newData = {
               name: document.getElementById('name').value.trim(),
               blood: document.getElementById('blood').value.trim(),
               allergies: document.getElementById('allergies').value.trim(),
               condition: document.getElementById('condition').value.trim(),
               contact: document.getElementById('contact').value.trim(),
-              createdAt: new Date().toISOString()
+              updatedAt: new Date().toISOString(),
             };
 
-            // Basic validation
-            if (!data.name) {
+            if (!newData.name) {
               alert('Please enter a name.');
               return;
             }
 
             try {
-              await setDoc(ref, data);
-              // Success: reload to display saved data
-              location.reload();
+              await setDoc(ref, newData, { merge: true });
+              alert('Information saved successfully!');
+              showInfo(newData);
             } catch (err) {
               console.error(err);
-              alert('Failed to save. Check console for details. If the document already exists the rules may prevent overwrite.');
+              alert('Failed to save. Check console for details.');
             }
           });
         }
+
       } catch (err) {
         console.error('Error reading doc:', err);
         container.innerHTML = `<h2>Error</h2><p class="muted">Unable to access database. Check Firebase config and Firestore rules.</p>`;
       }
     }
 
-    // Simple HTML escape
+    // Escape functions
     function escapeHtml(str) {
       if (!str) return '';
       return str.replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+    }
+    function escapeAttr(str) {
+      if (!str) return '';
+      return str.replace(/"/g, '&quot;');
     }
   </script>
 </head>
