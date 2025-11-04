@@ -12,14 +12,14 @@
     button { padding: 10px 14px; border: none; border-radius: 6px; background: #1a9b59; color: white; cursor: pointer; }
     button:hover { background: #158048; }
     .muted { color: #666; font-size: 0.95rem; }
+    .small { font-size: 0.9rem; color: #666; }
   </style>
 
-  <!-- Firebase modular SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // Your Firebase config
+    // <-- REPLACE with your firebaseConfig (already present in your project) -->
     const firebaseConfig = {
       apiKey: "AIzaSyDbhVGOiY2gCNCvsElylzvAdcYsjaqldlc",
       authDomain: "health-5845b.firebaseapp.com",
@@ -32,11 +32,9 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // Get ID from URL (?id=)
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
 
-    // Create container
     const container = document.createElement('div');
     container.className = 'card';
     document.body.appendChild(container);
@@ -62,10 +60,10 @@
           const data = snap.data();
           showInfo(data);
         } else {
-          showForm({});
+          showForm({}); // empty for first-time
         }
 
-        // --- SHOW INFO VIEW ---
+        // --- Show saved info with Edit button ---
         function showInfo(data) {
           container.innerHTML = `
             <h2>👤 ${escapeHtml(data.name || 'No name')}</h2>
@@ -74,26 +72,53 @@
             <p><b>Condition:</b> ${escapeHtml(data.condition || '-')}</p>
             <p><b>Emergency Contact:</b> ${escapeHtml(data.contact || '-')}</p>
             <p class="muted">Bracelet ID: <code>${escapeHtml(id)}</code></p>
-            <button id="editBtn">Edit Information</button>
+            <div style="margin-top:12px">
+              <button id="editBtn">Edit Information</button>
+            </div>
+            <p class="small" style="margin-top:10px;">To edit, you will be asked for the PIN you set when saving.</p>
           `;
 
-          document.getElementById('editBtn').addEventListener('click', () => {
+          document.getElementById('editBtn').addEventListener('click', async () => {
+            // Ask for PIN first
+            const enteredPin = prompt('Enter PIN to edit this record:');
+            if (enteredPin === null) return; // cancelled
+
+            // Compare to stored pin (data.pin may be undefined)
+            if (!data.pin) {
+              alert('No PIN set for this record. Editing is not allowed.');
+              return;
+            }
+            if (enteredPin.trim() !== String(data.pin)) {
+              alert('Incorrect PIN. You cannot edit this record.');
+              return;
+            }
+            // PIN ok → show prefilled form
             showForm(data);
           });
         }
 
-        // --- SHOW FORM VIEW ---
+        // --- Show form (for create or edit) ---
         function showForm(data) {
+          const isEdit = !!data.name;
           container.innerHTML = `
-            <h2>${data.name ? 'Edit Your Information' : 'Fill Your Health Info'}</h2>
+            <h2>${isEdit ? 'Edit Your Information' : 'Fill Your Health Info'}</h2>
             <input id="name" placeholder="Full name" value="${escapeAttr(data.name)}" />
             <input id="blood" placeholder="Blood Type (e.g. O+)" value="${escapeAttr(data.blood)}" />
             <input id="allergies" placeholder="Allergies (or 'None')" value="${escapeAttr(data.allergies)}" />
             <input id="condition" placeholder="Medical condition(s)" value="${escapeAttr(data.condition)}" />
             <input id="contact" placeholder="Emergency contact (name - phone)" value="${escapeAttr(data.contact)}" />
-            <button id="saveBtn">${data.name ? 'Save Changes' : 'Save Information'}</button>
+            <input id="pin" placeholder="Set an edit PIN (numbers or text)" value="${escapeAttr(data.pin)}" />
+            <div style="margin-top:10px;">
+              <button id="saveBtn">${isEdit ? 'Save Changes' : 'Save Information'}</button>
+              <button id="cancelBtn" style="margin-left:8px; background:#888;">Cancel</button>
+            </div>
             <p class="muted">This bracelet ID: <code>${escapeHtml(id)}</code></p>
           `;
+
+          document.getElementById('cancelBtn').addEventListener('click', () => {
+            // If was edit, re-show info; if new, go back to info (none) -> show form remains. We'll attempt to fetch again.
+            initForId(id);
+          });
 
           document.getElementById('saveBtn').addEventListener('click', async () => {
             const newData = {
@@ -102,7 +127,8 @@
               allergies: document.getElementById('allergies').value.trim(),
               condition: document.getElementById('condition').value.trim(),
               contact: document.getElementById('contact').value.trim(),
-              updatedAt: new Date().toISOString(),
+              pin: document.getElementById('pin').value.trim() || null,
+              updatedAt: new Date().toISOString()
             };
 
             if (!newData.name) {
@@ -111,11 +137,13 @@
             }
 
             try {
+              // Use merge so we don't remove other fields
               await setDoc(ref, newData, { merge: true });
               alert('Information saved successfully!');
-              showInfo(newData);
+              // show saved info view
+              initForId(id);
             } catch (err) {
-              console.error(err);
+              console.error('Save failed:', err);
               alert('Failed to save. Check console for details.');
             }
           });
@@ -127,14 +155,14 @@
       }
     }
 
-    // Escape functions
+    // Escapes
     function escapeHtml(str) {
-      if (!str) return '';
-      return str.replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+      if (str === undefined || str === null) return '';
+      return String(str).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
     }
     function escapeAttr(str) {
-      if (!str) return '';
-      return str.replace(/"/g, '&quot;');
+      if (str === undefined || str === null) return '';
+      return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
   </script>
 </head>
